@@ -69,7 +69,7 @@ process.on('unhandledRejection', error => {
   console.error('❌ Unhandled promise rejection:', error);
 });
 
-const token = process.env.MTQzNjAyOTUwNDE5NDg3MTQzOA.G5fv10.A9PvN3VTFADuKU1nx-_bVsUIRuTCPjmFh3xg4I;
+const token = process.env.Discord_token;
 
 if (!token) {
   console.error('❌ שגיאה: לא נמצא DISCORD_TOKEN בקובץ .env');
