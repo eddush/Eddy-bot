@@ -42,24 +42,6 @@ client.once('ready', () => {
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
-  // 🧩 בדיקת מילים לא יפות
-  const badWords = ["טיפש", "מטומטם", "מגעיל", "fuck", "shit"]; // תוכל להוסיף כאן מילים נוספות
-  const foundWord = badWords.find(word =>
-    message.content.toLowerCase().includes(word.toLowerCase())
-  );
-
-  if (foundWord) {
-    // אם נמצאה מילה אסורה
-    try {
-      await message.delete();
-      await message.channel.send(`${message.author}, אסור להשתמש במילים לא יפות! 🚫`);
-      return; // כדי לא להמשיך להריץ את הפקודה
-    } catch (err) {
-      console.error('שגיאה במחיקת הודעה:', err);
-    }
-  }
-
-  // ⚙️ פקודות
   const prefix = '!';
   if (!message.content.startsWith(prefix)) return;
 
@@ -67,6 +49,7 @@ client.on('messageCreate', async message => {
   const commandName = args.shift().toLowerCase();
 
   const command = client.commands.get(commandName);
+
   if (!command) return;
 
   try {
@@ -84,22 +67,6 @@ client.on('error', error => {
 
 process.on('unhandledRejection', error => {
   console.error('❌ Unhandled promise rejection:', error);
-});
-
-const token = process.env.TOKEN;
-
-if (!token) {
-  console.error('❌ שגיאה: לא נמצא DISCORD_TOKEN בקובץ .env');
-  console.error('📝 אנא צור קובץ .env והוסף את טוקן הבוט שלך');
-  console.error('💡 ראה את הקובץ .env.example לדוגמה');
-  process.exit(1);
-}
-
-client.login(token).catch(error => {
-  console.error('❌ שגיאה בהתחברות לדיסקורד:', error);
-  console.error('💡 וודא שהטוקן תקין ושהבוט מופעל בפורטל Discord Developer');
-  process.exit(1);
-});
 });
 
 const token = process.env.TOKEN;
