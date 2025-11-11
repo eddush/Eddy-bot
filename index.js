@@ -36,6 +36,7 @@ client.once('ready', () => {
   console.log(`📊 משתמשים: ${client.users.cache.size}`);
   console.log('----------------------------');
   
+  client.user.setActivity('שלום אני בוט שנוצר על ידי Eddyshermant');
   client.user.setActivity('!help לעזרה');
 });
 
