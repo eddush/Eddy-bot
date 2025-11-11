@@ -37,7 +37,7 @@ client.once('ready', () => {
   console.log('----------------------------');
   
   client.user.setActivity('שלום אני בוט שנוצר על ידי Eddyshermant');
-  client.user.setActivity('!help לעזרה');
+  client.user.setActivity('שלום הבוט נוצר ידי  !help לעזרה');
 });
 
 client.on('messageCreate', async message => {
