@@ -1,7 +1,7 @@
 module.exports = {
-  name: 'mycommand',
+  name: 'שלום',
   description: 'שלום',
   execute(message, args, client) {
-    message.reply('שלום');
+    message.reply('שלום וברוך הבא לשרת!');
   },
 };
