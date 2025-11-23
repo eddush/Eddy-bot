@@ -13,6 +13,9 @@ const client = new Client({
 
 client.commands = new Collection();
 
+// -----------------------------
+// 🔧 טעינת פקודות מתיקיית commands
+// -----------------------------
 const commandsPath = path.join(__dirname, 'commands');
 if (!fs.existsSync(commandsPath)) {
   fs.mkdirSync(commandsPath);
@@ -29,20 +32,59 @@ for (const file of commandFiles) {
   }
 }
 
+// -----------------------------
+// 🟢 כאשר הבוט מתחבר
+// -----------------------------
 client.once('ready', () => {
   console.log('✅ הבוט מחובר ופעיל!');
   console.log(`🤖 מחובר בתור: ${client.user.tag}`);
   console.log(`🌐 שרתים: ${client.guilds.cache.size}`);
   console.log(`📊 משתמשים: ${client.users.cache.size}`);
   console.log('----------------------------');
-  
-  client.user.setActivity('שלום אני בוט שנוצר על ידי Eddyshermant');
-  client.user.setActivity('שלום הבוט נוצר ידי  !help לעזרה');
+
+  client.user.setActivity('שלום הבוט נוצר ע"י Eddyshermant | !help לעזרה');
 });
 
+// -----------------------------
+// 🚨 מערכת סינון מילים לא יפות
+// -----------------------------
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
+  // רשימת מילים אסורות בעברית
+  const badWords = [
+    "חרא",
+    "זבל",
+    "בן זונה",
+    "שרמוטה",
+    "זונה",
+    "מניאק",
+    "טמבל",
+    "מטומטם",
+    "כלב בן כלב",
+    "דפוק"
+  ];
+
+  const msg = message.content.toLowerCase();
+
+  // בדיקה אם ההודעה מכילה מילה אסורה
+  const found = badWords.some(word => msg.includes(word));
+
+  if (found) {
+    try {
+      await message.delete();
+    } catch {}
+
+    await message.channel.send(`⚠️ ${message.author} בבקשה לא להשתמש במילים לא יפות!`);
+
+    console.log(`🚨 הודעה נמחקה בגלל מילה אסורה: "${message.content}" מאת ${message.author.tag}`);
+
+    return; // חשוב – לא להמשיך לפקודות
+  }
+
+  // -----------------------------
+  // 🟦 מערכת הפקודות הרגילה
+  // -----------------------------
   const prefix = '!';
   if (!message.content.startsWith(prefix)) return;
 
@@ -50,7 +92,6 @@ client.on('messageCreate', async message => {
   const commandName = args.shift().toLowerCase();
 
   const command = client.commands.get(commandName);
-
   if (!command) return;
 
   try {
@@ -62,6 +103,9 @@ client.on('messageCreate', async message => {
   }
 });
 
+// -----------------------------
+// ❌ טיפול בשגיאות
+// -----------------------------
 client.on('error', error => {
   console.error('❌ שגיאת Discord:', error);
 });
@@ -70,17 +114,17 @@ process.on('unhandledRejection', error => {
   console.error('❌ Unhandled promise rejection:', error);
 });
 
+// -----------------------------
+// 🔑 התחברות לבוט
+// -----------------------------
 const token = process.env.TOKEN;
 
 if (!token) {
-  console.error('❌ שגיאה: לא נמצא DISCORD_TOKEN בקובץ .env');
-  console.error('📝 אנא צור קובץ .env והוסף את טוקן הבוט שלך');
-  console.error('💡 ראה את הקובץ .env.example לדוגמה');
+  console.error('❌ שגיאה: לא נמצא TOKEN בקובץ .env');
   process.exit(1);
 }
 
 client.login(token).catch(error => {
   console.error('❌ שגיאה בהתחברות לדיסקורד:', error);
-  console.error('💡 וודא שהטוקן תקין ושהבוט מופעל בפורטל Discord Developer');
   process.exit(1);
 });
