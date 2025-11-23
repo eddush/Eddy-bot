@@ -33,7 +33,7 @@ for (const file of commandFiles) {
 }
 
 // -----------------------------
-// 🟢 כאשר הבוט מתחבר
+// 🤖 כשהבוט עולה
 // -----------------------------
 client.once('ready', () => {
   console.log('✅ הבוט מחובר ופעיל!');
@@ -45,9 +45,13 @@ client.once('ready', () => {
   client.user.setActivity('שלום הבוט נוצר ע"י Eddyshermant | !help לעזרה');
 });
 
-// -----------------------------
-// 🚨 מערכת סינון מילים לא יפות
-// -----------------------------
+// ------------------------------------------------
+// 🚨 מערכת סינון מילים + ספירת קללות + מיוט אוטומטי
+// ------------------------------------------------
+
+// מאגר ספירות קללות לכל משתמש
+const warnings = new Map();
+
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
@@ -66,24 +70,50 @@ client.on('messageCreate', async message => {
   ];
 
   const msg = message.content.toLowerCase();
-
-  // בדיקה אם ההודעה מכילה מילה אסורה
   const found = badWords.some(word => msg.includes(word));
 
   if (found) {
-    try {
-      await message.delete();
-    } catch {}
+    // מחיקת ההודעה
+    await message.delete().catch(() => {});
 
+    // אזהרה בערוץ
     await message.channel.send(`⚠️ ${message.author} בבקשה לא להשתמש במילים לא יפות!`);
 
-    console.log(`🚨 הודעה נמחקה בגלל מילה אסורה: "${message.content}" מאת ${message.author.tag}`);
+    // ספירת אזהרות
+    const userId = message.author.id;
+    const count = (warnings.get(userId) || 0) + 1;
+    warnings.set(userId, count);
 
-    return; // חשוב – לא להמשיך לפקודות
+    console.log(`🚨 ${message.author.tag} קיבל אזהרה (${count}/3)`);
+
+    // אם הגיע ל־3 אזהרות → מיוט
+    if (count >= 3) {
+      warnings.set(userId, 0); // איפוס הספירה
+
+      // חיפוש רול של Muted
+      const muteRole = message.guild.roles.cache.find(r => r.name === "Muted");
+
+      if (!muteRole) {
+        return message.channel.send("❌ לא נמצא רול בשם **Muted**. צור אחד כדי להפעיל מיוט.");
+      }
+
+      // מתן מיוט
+      await message.member.roles.add(muteRole).catch(() => {});
+      message.channel.send(`🔇 ${message.author} קיבל מיוט ל־10 דקות עקב 3 קללות!`);
+
+      // הסרת מיוט אחרי 10 דקות
+      setTimeout(() => {
+        message.member.roles.remove(muteRole).catch(() => {});
+        message.channel.send(`🔈 ${message.author} הוסר המיוט!`);
+      }, 10 * 60 * 1000);
+
+    }
+
+    return; // לא להריץ פקודות
   }
 
   // -----------------------------
-  // 🟦 מערכת הפקודות הרגילה
+  // 🟦 מערכת פקודות רגילה
   // -----------------------------
   const prefix = '!';
   if (!message.content.startsWith(prefix)) return;
@@ -99,7 +129,7 @@ client.on('messageCreate', async message => {
     await command.execute(message, args, client);
   } catch (error) {
     console.error(`❌ שגיאה בפקודה ${commandName}:`, error);
-    await message.reply('אירעה שגיאה בעת ביצוע הפקודה!');
+    await message.reply("❌ אירעה שגיאה בעת ביצוע הפקודה!");
   }
 });
 
