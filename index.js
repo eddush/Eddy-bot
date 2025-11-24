@@ -11,15 +11,11 @@ const client = new Client({
   ],
 });
 
+// טעינת פקודות
 client.commands = new Collection();
 
-// -----------------------------
-// 🔧 טעינת פקודות מתיקיית commands
-// -----------------------------
 const commandsPath = path.join(__dirname, 'commands');
-if (!fs.existsSync(commandsPath)) {
-  fs.mkdirSync(commandsPath);
-}
+if (!fs.existsSync(commandsPath)) fs.mkdirSync(commandsPath);
 
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
@@ -32,129 +28,131 @@ for (const file of commandFiles) {
   }
 }
 
-// -----------------------------
-// 🤖 כשהבוט עולה
-// -----------------------------
-client.once('ready', () => {
-  console.log('✅ הבוט מחובר ופעיל!');
-  console.log(`🤖 מחובר בתור: ${client.user.tag}`);
-  console.log(`🌐 שרתים: ${client.guilds.cache.size}`);
-  console.log(`📊 משתמשים: ${client.users.cache.size}`);
-  console.log('----------------------------');
+// רשימת מילים לא יפות
+const badWords = ["חרא", "מניאק", "זונה", "בן זונה", "דפוק", "מטומטם", "מפגר"];
 
-  client.user.setActivity('שלום הבוט נוצר ע"י Eddyshermant | !help לעזרה');
-});
-
-// ------------------------------------------------
-// 🚨 מערכת סינון מילים + ספירת קללות + מיוט אוטומטי
-// ------------------------------------------------
-
-// מאגר ספירות קללות לכל משתמש
+// מעקב אזהרות
 const warnings = new Map();
 
+// =====================
+//     EVENT READY
+// =====================
+client.once('ready', () => {
+  console.log('✅ הבוט פעיל!');
+  client.user.setActivity('!help לעזרה');
+});
+
+// =====================
+//     פקודות !
+// =====================
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
+  if (!message.content.startsWith('!')) return;
 
-  // רשימת מילים אסורות בעברית
-  const badWords = [
-    "חרא",
-    "זבל",
-    "בן זונה",
-    "שרמוטה",
-    "זונה",
-    "מניאק",
-    "טמבל",
-    "מטומטם",
-    "כלב בן כלב",
-    "דפוק"
-  ];
-
-  const msg = message.content.toLowerCase();
-  const found = badWords.some(word => msg.includes(word));
-
-  if (found) {
-    // מחיקת ההודעה
-    await message.delete().catch(() => {});
-
-    // אזהרה בערוץ
-    await message.channel.send(`⚠️ ${message.author} בבקשה לא להשתמש במילים לא יפות!`);
-
-    // ספירת אזהרות
-    const userId = message.author.id;
-    const count = (warnings.get(userId) || 0) + 1;
-    warnings.set(userId, count);
-
-    console.log(`🚨 ${message.author.tag} קיבל אזהרה (${count}/3)`);
-
-    // אם הגיע ל־3 אזהרות → מיוט
-    if (count >= 3) {
-      warnings.set(userId, 0); // איפוס הספירה
-
-      // חיפוש רול של Muted
-      const muteRole = message.guild.roles.cache.find(r => r.name === "Muted");
-
-      if (!muteRole) {
-        return message.channel.send("❌ לא נמצא רול בשם **Muted**. צור אחד כדי להפעיל מיוט.");
-      }
-
-      // מתן מיוט
-      await message.member.roles.add(muteRole).catch(() => {});
-      message.channel.send(`🔇 ${message.author} קיבל מיוט ל־10 דקות עקב 3 קללות!`);
-
-      // הסרת מיוט אחרי 10 דקות
-      setTimeout(() => {
-        message.member.roles.remove(muteRole).catch(() => {});
-        message.channel.send(`🔈 ${message.author} הוסר המיוט!`);
-      }, 10 * 60 * 1000);
-
-    }
-
-    return; // לא להריץ פקודות
-  }
-
-  // -----------------------------
-  // 🟦 מערכת פקודות רגילה
-  // -----------------------------
-  const prefix = '!';
-  if (!message.content.startsWith(prefix)) return;
-
-  const args = message.content.slice(prefix.length).trim().split(/ +/);
+  const args = message.content.slice(1).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
-
   const command = client.commands.get(commandName);
+
   if (!command) return;
 
   try {
-    console.log(`⚡ הפעלת פקודה: ${commandName} על ידי ${message.author.tag}`);
     await command.execute(message, args, client);
-  } catch (error) {
-    console.error(`❌ שגיאה בפקודה ${commandName}:`, error);
-    await message.reply("❌ אירעה שגיאה בעת ביצוע הפקודה!");
+  } catch (err) {
+    console.error(err);
+    message.reply("❌ שגיאה בהרצת פקודה");
   }
 });
 
-// -----------------------------
-// ❌ טיפול בשגיאות
-// -----------------------------
-client.on('error', error => {
-  console.error('❌ שגיאת Discord:', error);
+// =============================
+//   מערכת מילים לא יפות + מיוט
+// =============================
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+
+  const content = message.content.toLowerCase();
+  const found = badWords.some(word => content.includes(word));
+
+  if (!found) return;
+
+  const userId = message.author.id;
+  const guild = message.guild;
+
+  // העלאת אזהרות
+  let count = warnings.get(userId) || 0;
+  count++;
+  warnings.set(userId, count);
+
+  await message.reply(`⚠ **שפה לא מתאימה!** (${count}/3)`);
+
+  // אחרי 3 אזהרות → מיוט
+  if (count >= 3) {
+    warnings.delete(userId);
+
+    // מחפש רול Muted
+    let mutedRole = guild.roles.cache.find(r => r.name === "Muted");
+
+    // אם אין — יוצר רול חדש
+    if (!mutedRole) {
+      mutedRole = await guild.roles.create({
+        name: "Muted",
+        color: "#2f3136",
+        permissions: []
+      });
+
+      // חוסם שליחת הודעות בכל הערוצים
+      guild.channels.cache.forEach(channel => {
+        channel.permissionOverwrites.edit(mutedRole, {
+          SendMessages: false,
+          AddReactions: false,
+          Speak: false
+        });
+      });
+
+      console.log("✔ נוצר רול Muted חדש");
+    }
+
+    // נותן למשתמש מיוט
+    const member = guild.members.cache.get(userId);
+    await member.roles.add(mutedRole);
+
+    message.channel.send(`🔇 ${message.author} קיבל **מיוט** על שימוש בשפה לא מתאימה.`);
+  }
 });
 
-process.on('unhandledRejection', error => {
-  console.error('❌ Unhandled promise rejection:', error);
+// ===================================
+//  תגובה אוטומטית לטיקט של TicketTool
+// ===================================
+client.on('channelCreate', async channel => {
+  try {
+    if (!channel.name.startsWith("ticket-")) return;
+
+    await channel.send(
+      `<@932219806537625621> Welcome 🎫  
+אנא כתוב מה הבעיה ואנחנו נטפל בה 😊`
+    );
+
+    console.log(`✔ נשלח Welcome לטיקט: ${channel.name}`);
+
+  } catch (err) {
+    console.error("שגיאה בטיקט:", err);
+  }
 });
 
-// -----------------------------
-// 🔑 התחברות לבוט
-// -----------------------------
-const token = process.env.TOKEN;
+// ==========================
+//   זיהוי מי פתח את הטיקט
+// ==========================
+client.on('messageCreate', async message => {
+  if (!message.channel.name.startsWith("ticket-")) return;
+  if (!message.author.bot) return;
 
-if (!token) {
-  console.error('❌ שגיאה: לא נמצא TOKEN בקובץ .env');
-  process.exit(1);
-}
+  const opener = message.mentions.users.first();
+  if (!opener) return;
 
-client.login(token).catch(error => {
-  console.error('❌ שגיאה בהתחברות לדיסקורד:', error);
-  process.exit(1);
+  await message.channel.send(`👋 היי ${opener}, קיבלתי את הטיקט שלך! איך אפשר לעזור?`);
 });
+
+
+// =====================
+//       LOGIN
+// =====================
+client.login(process.env.TOKEN);
