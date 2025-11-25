@@ -145,7 +145,7 @@ client.on('channelCreate', async channel => {
     const row = new ActionRowBuilder().addComponents(select);
 
     const embed = new EmbedBuilder()
-      .setTitle('🎫 ברוכים הבאים לטיקט')
+      .setTitle('<:ticketsolidfull:1442833730548006962> ברוכים הבאים לטיקט')
       .setDescription('בחר את סוג הפנייה כדי שנוכל לטפל בה מהר יותר.')
       .setColor(0x5865F2);
 
