@@ -103,12 +103,21 @@ client.on('messageCreate', async message => {
       await member.roles.add(muted).catch(() => {});
       await message.channel.send(`🔇 ${message.author} הושתק עקב 3 אזהרות. המיוט יוסר אוטומטית בעוד 10 דקות.`);
 
-      // הסרת מיוט אחרי 10 דקות
+            // הסרת מיוט אחרי 10 דקות
       setTimeout(async () => {
         try {
           await member.roles.remove(muted);
-          await message.channel.send(`🔈 ${message.author} הוסר המיוט.`);
-        } catch {}
+      
+          // שליחת הודעה בפרטי
+          try {
+            await member.send(`🔈 היי! המיוט שלך הוסר עכשיו. אנא הקפד לשמור על שפה מתאימה 😊`);
+          } catch (err) {
+            console.log('❌ לא ניתן לשלוח DM למשתמש.');
+          }
+      
+        } catch (err) {
+          console.log('❌ שגיאה בהסרת המיוט:', err);
+        }
       }, 10 * 60 * 1000);
     }
   }
