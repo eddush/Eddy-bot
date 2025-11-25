@@ -13,7 +13,7 @@ module.exports = {
         if (teamRole) {
             const embed = new EmbedBuilder()
                 .setColor(0xff0000)
-                .setTitle("🆘<:emoji_8:1442191217994498188> קריאה לעזרה לצוות!")
+                .setTitle("🆘<:image0:1442833732762341437> קריאה לעזרה לצוות!")
                 .setDescription(`${teamRole}, יש קריאה לעזרה!`)
                 .addFields(
                     { name: "📢 מי ביקש עזרה:", value: `${message.author}`, inline: true },
