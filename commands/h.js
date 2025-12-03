@@ -9,12 +9,13 @@ module.exports = {
 
         // מוצא את הרול בשם "צוות"
         const teamRole = message.guild.roles.cache.find(role => role.name === "צוות");
+        const supreedteam = message.guild.roles.cache.find(role => role.name === "supreedteam");
 
         if (teamRole) {
             const embed = new EmbedBuilder()
                 .setColor(0xff0000)
                 .setTitle("🆘<:image0:1442833732762341437> קריאה לעזרה לצוות!")
-                .setDescription(`${teamRole}, יש קריאה לעזרה!`)
+                .setDescription(`${supreedteam} ${teamRole}, יש קריאה לעזרה!`)
                 .addFields(
                     { name: "📢 מי ביקש עזרה:", value: `${message.author}`, inline: true },
                     { name: "📝 סיבה:", value: reason, inline: false }
