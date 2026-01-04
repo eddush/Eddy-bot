@@ -56,14 +56,16 @@ client.login(process.env.TOKEN);
 // Fake server ל־Render
 // ----------------------------
 
+const express = require("express");
 const app = express();
 
 app.get("/", (req, res) => {
     res.send("Bot is running!");
 });
 
-// Render דורש PORT מהסביבה
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+// ב-Render *חובה* להשתמש ב-process.env.PORT בלי ברירת מחדל אחרת
+const PORT = process.env.PORT;
+
+app.listen(PORT, "0.0.0.0", () => {
     console.log(`🌐 Fake server running on port ${PORT}`);
 });
