@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, Collection, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, Events, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 
 const client = new Client({
   intents: [
@@ -308,8 +309,24 @@ client.on(Events.InteractionCreate, async interaction => {
 
 // -----------------------------
 // מיילסטון: למנוע יחס של הבוט להודעות שלו (אין לולאה)
-// שאר האיוונטים כבר מתחשבים ב-author.id/role
+// שאר האיוונטים כבר מתחשבים ב.author.id/role
 // -----------------------------
+
+// -----------------------------
+// Fake server ל-Render
+// -----------------------------
+const app = express();
+
+app.get('/', (req, res) => {
+  res.send('Bot is running!');
+});
+
+// ב-Render הוא נותן PORT אוטומטית, מקומית נשתמש ב-3000
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 Fake server running on port ${PORT}`);
+});
 
 // -----------------------------
 // התחברות
