@@ -24,6 +24,8 @@ module.exports = {
             .setColor(0xff0000)
             .setTitle("🆘<:image0:1442833732762341437> קריאה לעזרה לצוות!")
             .setDescription(`${supreedteam} ${teamRole}, יש קריאה לעזרה!`)
+            // תמונת הפרופיל של מי שביקש את העזרה בלבד
+            .setThumbnail(message.author.displayAvatarURL({ dynamic: true, size: 256 }))
             .addFields(
                 { name: "📢 מי ביקש עזרה:", value: `${message.author}`, inline: true },
                 { name: "📝 סיבה:", value: reason, inline: false }
