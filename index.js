@@ -317,15 +317,21 @@ client.on(Events.InteractionCreate, async interaction => {
 // -----------------------------
 const app = express();
 
-app.get('/', (req, res) => {
-  res.send('Bot is running!');
-});
+const express = require('express');
 
-// ב-Render הוא נותן PORT אוטומטית, מקומית נשתמש ב-3000
+const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.get('/', (req, res) => {
+  res.send('Eddy Bot is online!');
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 Fake server running on port ${PORT}`);
+  console.log(`🌐 Web server running on port ${PORT}`);
 });
 
 // -----------------------------
