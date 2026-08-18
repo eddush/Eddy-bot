@@ -315,11 +315,8 @@ client.on(Events.InteractionCreate, async interaction => {
 // -----------------------------
 // Fake server ל-Render
 // -----------------------------
-const app = express();
-
-
-const app = express();
 const PORT = process.env.PORT || 3000;
+const app = express();
 
 app.get('/', (req, res) => {
   res.send('Eddy Bot is online!');
