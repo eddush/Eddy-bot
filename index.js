@@ -331,4 +331,4 @@ app.listen(PORT, '0.0.0.0', () => {
 // -----------------------------
 // התחברות
 // -----------------------------
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.TOKEN);
