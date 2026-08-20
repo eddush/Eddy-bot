@@ -30,7 +30,7 @@ const warnings = new Map();
 
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  client.user.setActivity('!help | Ticket automation');
+  client.user.setActivity('!help | !balance <MinecraftName>');
 });
 
 client.on('messageCreate', async message => {
