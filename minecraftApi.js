@@ -2,9 +2,9 @@
 const { Rcon } = require('rcon-client');
 
 const RCON_CONFIG = {
-  host: 'YOUR_MINECRAFT_SERVER_IP',
+  host: 'eddydev.ddns.net',
   port: 25575,
-  password: 'YourRconSecretPassword'
+  password: 'K9x#mQ7$vL2!wR8*pT4^bN1@zF5&yU6('
 };
 
 async function requestBalance(username) {
