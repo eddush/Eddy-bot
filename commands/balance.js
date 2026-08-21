@@ -5,6 +5,10 @@ module.exports = {
   name: 'balance',
 
   async execute(message, args) {
+    // זמנית מושבת בגלל תקלה בבדיקת הכסף.
+    return message.reply('⚠️ בדיקת הכסף מושבתת זמנית.');
+
+    /*
     const username = args[0];
 
     if (!username) {
@@ -39,5 +43,6 @@ module.exports = {
         embeds: [],
       });
     }
+    */
   },
 };
