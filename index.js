@@ -3,7 +3,6 @@ const { Client, GatewayIntentBits, Collection, ActionRowBuilder, StringSelectMen
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { registerRoutes: registerMinecraftApiRoutes } = require('./minecraftApi');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
 client.commands = new Collection();
@@ -13,7 +12,7 @@ const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))
 for (const file of commandFiles) { const cmd = require(path.join(commandsPath, file)); if (cmd.name && cmd.execute) client.commands.set(cmd.name, cmd); }
 const TEAM_ROLE_ID = '1439948657670754324'; const DEV_ROLE_ID = '1442556761541447720';
 const badWords = ["חרא", "מניאק", "זונה", "בן זונה", "דפוק", "מטומטם", "מפגר"]; const warnings = new Map();
-client.once('ready', () => { console.log(`✅ Logged in as ${client.user.tag}`); client.user.setActivity('!help | !balance <MinecraftName>'); });
+client.once('ready', () => { console.log(`✅ Logged in as ${client.user.tag}`); client.user.setActivity('EddyWEB | Discord'); });
 client.on('messageCreate', async message => { if (message.author.bot || !message.content.startsWith('!')) return; const args = message.content.slice(1).trim().split(/\s+/); const name = args.shift().toLowerCase(); const command = client.commands.get(name); if (!command) return; try { await command.execute(message,args,client); } catch(err) { console.error('Command error:',err); message.reply('❌ שגיאה בהרצת הפקודה.'); } });
 client.on('messageCreate', async message => { if(message.author.bot||!message.guild)return; const found=badWords.some(w=>message.content.toLowerCase().includes(w)); if(!found)return; const userId=message.author.id; let c=(warnings.get(userId)||0)+1; warnings.set(userId,c); await message.reply(`⚠️ שפה לא מתאימה (${c}/3).`); if(c>=3){warnings.delete(userId);let muted=message.guild.roles.cache.find(r=>r.name==='Muted');if(!muted){muted=await message.guild.roles.create({name:'Muted',permissions:[]});for(const[,ch]of message.guild.channels.cache){try{await ch.permissionOverwrites.edit(muted,{SendMessages:false,AddReactions:false,Speak:false});}catch{}}}const member=await message.guild.members.fetch(userId).catch(()=>null);if(member){await member.roles.add(muted).catch(()=>{});await message.channel.send(`🔇 ${message.author} הושתק עקב 3 אזהרות. המיוט יוסר אוטומטית בעוד 10 דקות.`);setTimeout(async()=>{try{await member.roles.remove(muted);try{await member.send(`🔈 היי! המיוט שלך הוסר עכשיו.`);}catch{}}catch(err){console.log('❌ שגיאה בהסרת המיוט:',err);}},10*60*1000);}} });
 client.on('channelCreate', async channel => { try { if(!channel?.name?.startsWith('ticket-'))return; const select=new StringSelectMenuBuilder().setCustomId('ticket_main_select').setPlaceholder('בחר סוג פנייה...').addOptions([{label:'קבלה לצוות',value:'apply_team',description:'טופס קבלה לצוות ותיווג רול צוות'},{label:'באגים',value:'bugs',description:'דוח על באגים - בוט/שרת'},{label:'אחר',value:'other',description:'פנייה כללית ותיווג צוות'}]); await channel.send({embeds:[new EmbedBuilder().setTitle('<:ticketsolidfull:1442833730548006962> ברוכים הבאים לטיקט').setDescription('בחר את סוג הפנייה כדי שנוכל לטפל בה מהר יותר.').setColor(0x5865F2)],components:[new ActionRowBuilder().addComponents(select)]}); } catch(err){console.error('channelCreate error:',err);} });
@@ -27,5 +26,5 @@ app.use((req,res,next)=>{res.setHeader('Access-Control-Allow-Origin','*');res.se
 app.get('/',(req,res)=>res.send('Eddy Bot is online!'));
 app.get('/health',(req,res)=>res.status(200).send('OK'));
 app.get('/api/discord',(req,res)=>{const guild=client.guilds.cache.first();if(!guild)return res.status(503).json({ok:false,error:'Discord guild not ready'});res.json({ok:true,guildId:guild.id,name:guild.name,members:guild.memberCount,online:guild.presences?.cache?.size??0});});
-registerMinecraftApiRoutes(app); app.listen(PORT,'0.0.0.0',()=>console.log(`🌐 Web server running on port ${PORT}`));
+app.listen(PORT,'0.0.0.0',()=>console.log(`🌐 Web server running on port ${PORT}`));
 client.login(process.env.TOKEN);
