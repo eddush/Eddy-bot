@@ -49,7 +49,7 @@ function parseAiResult(raw) {
       .trim();
     return JSON.parse(cleaned);
   } catch {
-    return { roleName: null, answer: String(raw || '').trim() };
+    return { needsStaff: false, roleName: null, answer: String(raw || '').trim() };
   }
 }
 
@@ -73,8 +73,23 @@ function installGroqDiscordBridge(client) {
 
     const channelId = message.channel.id;
     if (!memory[channelId]) {
-      memory[channelId] = { createdAt: new Date().toISOString(), messages: [] };
+      memory[channelId] = {
+        createdAt: new Date().toISOString(),
+        openerId: message.author.id,
+        openerName: message.member?.displayName || message.author.username,
+        messages: []
+      };
     }
+
+    // The first non-bot message is treated as the ticket opener when the
+    // ticket system itself does not expose a dedicated "ticket opened" event.
+    if (!memory[channelId].openerId) {
+      memory[channelId].openerId = message.author.id;
+      memory[channelId].openerName = message.member?.displayName || message.author.username;
+    }
+
+    const openerId = memory[channelId].openerId;
+    const openerName = memory[channelId].openerName || message.author.username;
 
     const history = memory[channelId].messages;
     history.push({
@@ -93,7 +108,7 @@ function installGroqDiscordBridge(client) {
     const messages = [
       {
         role: 'system',
-        content: `${systemPrompt}\n\nYou must also choose a Discord role for this request from the EXISTING roles listed below. Never invent a role name. Choose the single most relevant role based on the user\'s problem and the conversation. If no role is appropriate, use null.\n\nEXISTING DISCORD ROLES:\n${roleList}\n\nReturn ONLY valid JSON in this exact format:\n{"roleName":"exact existing role name or null","answer":"your helpful answer to the user"}`
+        content: `${systemPrompt}\n\nTICKET OPENER: ${openerName} (<@${openerId}>)\nYou are currently helping the person who opened this ticket. Address them directly and politely.\n\nSTAFF ESCALATION:\nDo NOT notify or tag staff on every message. First try to solve the user's request yourself. Set needsStaff=true ONLY when a staff member genuinely needs to intervene (for example: a manual account change, refund/payment action, punishment/report requiring staff, permissions, a request to speak to staff, or something you cannot perform/verify). For ordinary questions that you can answer, set needsStaff=false and roleName=null.\n\nIf needsStaff=true, choose the single most relevant role from the EXISTING roles below. Never invent a role name. If no suitable role exists, use null.\n\nEXISTING DISCORD ROLES:\n${roleList}\n\nReturn ONLY valid JSON in this exact format:\n{"needsStaff":true,"roleName":"exact existing role name or null","answer":"your helpful answer to the ticket opener"}`
       },
       ...memory[channelId].messages.map(item => ({ role: item.role, content: item.content }))
     ];
@@ -103,22 +118,27 @@ function installGroqDiscordBridge(client) {
       const raw = await askGroq(messages);
       const result = parseAiResult(raw);
       const answer = result.answer || raw;
-      const role = findRole(message.guild, result.roleName);
+      const role = result.needsStaff === true ? findRole(message.guild, result.roleName) : null;
 
+      // Only tag a role when the AI explicitly says staff intervention is needed.
       if (role) {
         await message.channel.send({
           content: `<@&${role.id}>`,
           allowedMentions: { roles: [role.id] }
         });
-        console.log(`[Groq] Ticket ${channelId}: selected role "${role.name}" (${role.id})`);
+        console.log(`[Groq] Ticket ${channelId}: staff needed, selected role "${role.name}" (${role.id})`);
       } else {
-        console.log(`[Groq] Ticket ${channelId}: no matching role selected`);
+        console.log(`[Groq] Ticket ${channelId}: no staff role notification needed`);
       }
 
       if (answer) {
-        const chunks = splitDiscordMessage(`🤖 **Eddy AI:** ${answer}`);
+        const openerMention = `<@${openerId}>`;
+        const chunks = splitDiscordMessage(`${openerMention}\n🤖 **Eddy AI:** ${answer}`);
         for (const chunk of chunks) {
-          await message.channel.send(chunk);
+          await message.channel.send({
+            content: chunk,
+            allowedMentions: { users: [openerId] }
+          });
         }
       }
 
