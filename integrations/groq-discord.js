@@ -48,7 +48,7 @@ function installGroqDiscordBridge(client) {
     const history = memory[channelId].messages;
     history.push({
       role: 'user',
-      content: `${message.member?.displayName || message.author.username}: ${message.content || '[attachment]'}'
+      content: `${message.member?.displayName || message.author.username}: ${message.content || '[attachment]'}`
     });
     memory[channelId].messages = history.slice(-20);
     saveMemory(memory);
