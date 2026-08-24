@@ -33,6 +33,34 @@ function splitDiscordMessage(text, maxLength = 1900) {
   return chunks;
 }
 
+function getUsableRoles(guild) {
+  return guild.roles.cache
+    .filter(role => !role.managed && role.name !== '@everyone')
+    .sort((a, b) => b.position - a.position)
+    .map(role => role.name);
+}
+
+function parseAiResult(raw) {
+  try {
+    const cleaned = String(raw)
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return { roleName: null, answer: String(raw || '').trim() };
+  }
+}
+
+function findRole(guild, roleName) {
+  if (!roleName || typeof roleName !== 'string') return null;
+  const wanted = roleName.trim().toLowerCase();
+  return guild.roles.cache.find(role =>
+    !role.managed && role.name !== '@everyone' && role.name.toLowerCase() === wanted
+  ) || null;
+}
+
 function installGroqDiscordBridge(client) {
   const memory = loadMemory();
 
@@ -56,22 +84,42 @@ function installGroqDiscordBridge(client) {
     memory[channelId].messages = history.slice(-20);
     saveMemory(memory);
 
+    const roles = getUsableRoles(message.guild);
+    const roleList = roles.length ? roles.map(name => `- ${name}`).join('\n') : '(no usable roles)';
+
     const systemPrompt = process.env.GROQ_SYSTEM_PROMPT ||
-      'You are Eddy Bot support AI. Answer Discord ticket users clearly and politely. Reply in the same language as the user. If you do not know the answer, say that a staff member should handle the ticket. Do not claim to have performed actions you cannot perform.';
+      'You are Eddy Bot support AI. Answer Discord ticket users clearly and politely. Reply in the same language as the user. If you do not know the answer, say that a staff member should handle the ticket.';
 
     const messages = [
-      { role: 'system', content: systemPrompt },
+      {
+        role: 'system',
+        content: `${systemPrompt}\n\nYou must also choose a Discord role for this request from the EXISTING roles listed below. Never invent a role name. Choose the single most relevant role based on the user\'s problem and the conversation. If no role is appropriate, use null.\n\nEXISTING DISCORD ROLES:\n${roleList}\n\nReturn ONLY valid JSON in this exact format:\n{"roleName":"exact existing role name or null","answer":"your helpful answer to the user"}`
+      },
       ...memory[channelId].messages.map(item => ({ role: item.role, content: item.content }))
     ];
 
     try {
       await message.channel.sendTyping();
-      const answer = await askGroq(messages);
-      if (!answer) return;
+      const raw = await askGroq(messages);
+      const result = parseAiResult(raw);
+      const answer = result.answer || raw;
+      const role = findRole(message.guild, result.roleName);
 
-      const chunks = splitDiscordMessage(`🤖 **Eddy AI:** ${answer}`);
-      for (const chunk of chunks) {
-        await message.channel.send(chunk);
+      if (role) {
+        await message.channel.send({
+          content: `<@&${role.id}>`,
+          allowedMentions: { roles: [role.id] }
+        });
+        console.log(`[Groq] Ticket ${channelId}: selected role "${role.name}" (${role.id})`);
+      } else {
+        console.log(`[Groq] Ticket ${channelId}: no matching role selected`);
+      }
+
+      if (answer) {
+        const chunks = splitDiscordMessage(`🤖 **Eddy AI:** ${answer}`);
+        for (const chunk of chunks) {
+          await message.channel.send(chunk);
+        }
       }
 
       memory[channelId].messages.push({ role: 'assistant', content: answer });
