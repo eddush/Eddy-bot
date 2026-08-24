@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { PermissionFlagsBits } = require('discord.js');
 const { askGroq } = require('../services/groq');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -20,9 +21,20 @@ function saveMemory(memory) {
   fs.writeFileSync(MEMORY_FILE, JSON.stringify(memory, null, 2));
 }
 
+// Do NOT identify tickets by their name. The existing ticket system creates
+// channels with its own names. A ticket is detected from Discord's channel
+// permission overwrites: @everyone cannot view the channel while a regular
+// member has an explicit ViewChannel allow.
 function isTicketChannel(channel) {
-  const prefix = process.env.TICKET_CHANNEL_PREFIX || 'ticket-';
-  return channel?.isTextBased?.() && channel?.name?.toLowerCase().startsWith(prefix.toLowerCase());
+  if (!channel?.isTextBased?.() || !channel?.guild || !channel?.permissionOverwrites?.cache) return false;
+
+  const everyoneOverwrite = channel.permissionOverwrites.cache.get(channel.guild.roles.everyone.id);
+  if (!everyoneOverwrite?.deny?.has(PermissionFlagsBits.ViewChannel)) return false;
+
+  return channel.permissionOverwrites.cache.some(overwrite => {
+    if (overwrite.type !== 1) return false; // Member overwrite
+    return overwrite.allow?.has(PermissionFlagsBits.ViewChannel);
+  });
 }
 
 function isStaff(member) {
@@ -33,7 +45,7 @@ function installGroqDiscordBridge(client) {
   const memory = loadMemory();
 
   client.on('messageCreate', async (message) => {
-    if (message.author.bot || !isTicketChannel(message)) return;
+    if (message.author.bot || !isTicketChannel(message.channel)) return;
     if (isStaff(message.member)) return;
     if (!process.env.GROQ_API_KEY) return;
 
