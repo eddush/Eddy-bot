@@ -1,9 +1,10 @@
-const { AttachmentBuilder, PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits, ChannelType } = require('discord.js');
+
+const TRANSCRIPT_CATEGORY_ID = '1541363285490663455';
 
 module.exports = {
   name: 'tr',
   async execute(message) {
-    // Only server staff can create transcripts.
     if (!message.member?.permissions.has(PermissionFlagsBits.ManageMessages)) {
       return message.reply('❌ אין לך הרשאה להשתמש בפקודה הזאת.');
     }
@@ -12,12 +13,12 @@ module.exports = {
       return message.reply('❌ אפשר להשתמש בפקודה הזאת רק בערוץ טקסט בשרת.');
     }
 
-    const status = await message.reply('⏳ שומר את הצ׳אט, רגע...');
-    const allMessages = [];
-    let lastId;
+    const status = await message.reply('⏳ שומר את הצ׳אט ויוצר ערוץ transcript...');
 
     try {
-      // Discord returns at most 100 messages per request, so keep paging.
+      const allMessages = [];
+      let lastId;
+
       while (true) {
         const options = { limit: 100 };
         if (lastId) options.before = lastId;
@@ -27,7 +28,6 @@ module.exports = {
 
         allMessages.push(...batch.values());
         lastId = batch.last().id;
-
         if (batch.size < 100) break;
       }
 
@@ -44,9 +44,11 @@ module.exports = {
           dateStyle: 'short',
           timeStyle: 'medium'
         });
+
         const attachments = [...msg.attachments.values()]
-          .map(a => `<div class="attachment"><a href="${esc(a.url)}">📎 ${esc(a.name || 'קובץ')}</a></div>`)
+          .map(a => `<div class="attachment">📎 <a href="${esc(a.url)}">${esc(a.name || 'קובץ')}</a></div>`)
           .join('');
+
         const content = esc(msg.content || '').replace(/\n/g, '<br>');
 
         return `<div class="message">
@@ -77,20 +79,41 @@ ${rows || '<p>אין הודעות לשמירה.</p>'}
 </body>
 </html>`;
 
-      const buffer = Buffer.from(html, 'utf8');
-      const safeChannel = message.channel.name.replace(/[^a-zA-Z0-9א-ת_-]/g, '_').slice(0, 40) || 'channel';
-      const fileName = `transcript-${safeChannel}-${Date.now()}.html`;
-      const attachment = new AttachmentBuilder(buffer, { name: fileName });
+      const category = await message.guild.channels.fetch(TRANSCRIPT_CATEGORY_ID).catch(() => null);
 
-      await message.channel.send({
-        content: `✅ נשמר הצ׳אט של **#${message.channel.name}** — ${allMessages.length} הודעות.`,
-        files: [attachment]
+      if (!category || category.type !== ChannelType.GuildCategory) {
+        return status.edit('❌ לא מצאתי את הקטגוריה עם ה-ID שסיפקת. בדוק שה-ID נכון ושהקטגוריה נמצאת בשרת.');
+      }
+
+      const safeName = message.channel.name
+        .toLowerCase()
+        .replace(/[^a-z0-9א-ת_-]/g, '-')
+        .replace(/-+/g, '-')
+        .slice(0, 70) || 'chat';
+
+      const transcriptChannel = await message.guild.channels.create({
+        name: `transcript-${safeName}`,
+        type: ChannelType.GuildText,
+        parent: TRANSCRIPT_CATEGORY_ID,
+        reason: `Transcript created by ${message.author.tag}`
       });
 
-      await status.delete().catch(() => {});
+      const header = `# 📄 Transcript\n**שרת:** ${message.guild.name}\n**ערוץ מקורי:** #${message.channel.name}\n**נוצר על ידי:** ${message.author}\n**הודעות:** ${allMessages.length}`;
+      await transcriptChannel.send(header);
+
+      // Send the transcript as a file directly into the new channel.
+      const { AttachmentBuilder } = require('discord.js');
+      const buffer = Buffer.from(html, 'utf8');
+      const fileName = `transcript-${safeName}-${Date.now()}.html`;
+      await transcriptChannel.send({
+        content: '📁 קובץ ה-Transcript המלא של הצ׳אט:',
+        files: [new AttachmentBuilder(buffer, { name: fileName })]
+      });
+
+      await status.edit(`✅ יצרתי את ערוץ ה-Transcript: ${transcriptChannel}`);
     } catch (error) {
       console.error('Transcript error:', error);
-      await status.edit('❌ לא הצלחתי לשמור את הצ׳אט. בדוק שלבוט יש הרשאת **Read Message History** ו־**View Channel**.').catch(() => {});
+      await status.edit('❌ לא הצלחתי ליצור את ה-Transcript. בדוק שלבבוט יש הרשאות **Manage Channels**, **View Channel**, **Send Messages** ו־**Read Message History**.').catch(() => {});
     }
   }
 };
