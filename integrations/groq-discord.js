@@ -14,11 +14,23 @@ function saveMemory(memory) {
   fs.writeFileSync(MEMORY_FILE, JSON.stringify(memory, null, 2));
 }
 
-// The existing ticket system names ticket channels with "ticket".
-// Any text channel whose name starts with "ticket" is treated as a ticket.
 function isTicketChannel(channel) {
   if (!channel?.isTextBased?.() || !channel?.guild) return false;
   return typeof channel.name === 'string' && channel.name.toLowerCase().startsWith('ticket');
+}
+
+function splitDiscordMessage(text, maxLength = 1900) {
+  const chunks = [];
+  let remaining = String(text || '').trim();
+  while (remaining.length > maxLength) {
+    let cut = remaining.lastIndexOf('\n', maxLength);
+    if (cut < 500) cut = remaining.lastIndexOf(' ', maxLength);
+    if (cut < 1) cut = maxLength;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
 }
 
 function installGroqDiscordBridge(client) {
@@ -26,14 +38,14 @@ function installGroqDiscordBridge(client) {
 
   client.on('messageCreate', async (message) => {
     if (message.author.bot || !isTicketChannel(message.channel)) return;
-    if (!process.env.GROQ_API_KEY) return;
+    if (!process.env.GROQ_API_KEY) {
+      console.error('[Groq] GROQ_API_KEY is missing');
+      return;
+    }
 
     const channelId = message.channel.id;
     if (!memory[channelId]) {
-      memory[channelId] = {
-        createdAt: new Date().toISOString(),
-        messages: []
-      };
+      memory[channelId] = { createdAt: new Date().toISOString(), messages: [] };
     }
 
     const history = memory[channelId].messages;
@@ -57,12 +69,16 @@ function installGroqDiscordBridge(client) {
       const answer = await askGroq(messages);
       if (!answer) return;
 
-      await message.channel.send(`🤖 **Eddy AI:** ${answer}`);
+      const chunks = splitDiscordMessage(`🤖 **Eddy AI:** ${answer}`);
+      for (const chunk of chunks) {
+        await message.channel.send(chunk);
+      }
+
       memory[channelId].messages.push({ role: 'assistant', content: answer });
       memory[channelId].messages = memory[channelId].messages.slice(-20);
       saveMemory(memory);
     } catch (error) {
-      console.error('Groq bridge error:', error?.data || error);
+      console.error('[Groq bridge error]', error?.stack || error?.message || error?.data || error);
       await message.channel.send('⚠️ ה־AI לא הצליח לענות כרגע. צוות התמיכה יכול לטפל בטיקט.').catch(() => {});
     }
   });
