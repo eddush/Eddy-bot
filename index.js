@@ -1,12 +1,14 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection, Events } = require('discord.js');
 const fs=require('fs'),path=require('path'),express=require('express');
+const { installTidioDiscordBridge } = require('./integrations/tidio-discord');
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildPresences]});
 client.commands=new Collection();const commandsPath=path.join(__dirname,'commands');if(!fs.existsSync(commandsPath))fs.mkdirSync(commandsPath);for(const file of fs.readdirSync(commandsPath).filter(f=>f.endsWith('.js'))){const cmd=require(path.join(commandsPath,file));if(cmd.name&&cmd.execute)client.commands.set(cmd.name,cmd);}
 const DISCORD_GUILD_ID='1417557162875555974';
 const STAFF_ROLE_IDS={team:'1439948657670754324',developers:'1442556761541447720',helpers:'1531588090588823614',moderators:'1439948877183582208'};
 client.once('ready',()=>{console.log(`✅ Logged in as ${client.user.tag}`);client.user.setActivity('EddyWEB | Discord');});
 client.on('messageCreate',async message=>{if(message.author.bot||!message.content.startsWith('!'))return;const args=message.content.slice(1).trim().split(/\s+/),name=args.shift().toLowerCase(),command=client.commands.get(name);if(!command)return;try{await command.execute(message,args,client);}catch(err){console.error('Command error:',err);message.reply('❌ שגיאה בהרצת הפקודה.').catch(()=>{});}});
+installTidioDiscordBridge(client);
 const PORT=process.env.PORT||3000;const app=express();app.use((req,res,next)=>{res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Methods','GET,OPTIONS');next();});app.get('/',(req,res)=>res.send('Eddy Bot is online!'));app.get('/health',(req,res)=>res.status(200).send('OK'));
 app.get('/api/discord',(req,res)=>{const guild=client.guilds.cache.get(DISCORD_GUILD_ID);if(!guild)return res.status(503).json({ok:false,error:'Eddy Discord server not found or bot not ready'});const roleData={};let totalAvailable=0;for(const [name,id] of Object.entries(STAFF_ROLE_IDS)){const role=guild.roles.cache.get(id);const members=role?role.members.filter(m=>!m.user.bot):new Map();const online=members.filter(m=>m.presence?.status&&m.presence.status!=='offline').size;roleData[name]={roleId:id,name:role?.name||name,total:members.size,online,available:online};totalAvailable+=online;}res.json({ok:true,guildId:guild.id,name:guild.name,members:guild.memberCount,humans:guild.members.cache.filter(m=>!m.user.bot).size,bots:guild.members.cache.filter(m=>m.user.bot).size,online:guild.presences.cache.filter(p=>!p.user?.bot).size,staff:{totalAvailable,roles:roleData}});});
 app.listen(PORT,'0.0.0.0',()=>console.log(`🌐 Web server running on port ${PORT}`));client.login(process.env.TOKEN);
