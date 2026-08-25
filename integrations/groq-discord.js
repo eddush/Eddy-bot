@@ -6,6 +6,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const MEMORY_FILE = path.join(DATA_DIR, 'groq-tickets.json');
 const KNOWLEDGE_FILE = path.join(DATA_DIR, 'groq-staff-knowledge.json');
+const STAFF_ROLE_ID = '1439948657670754324';
 
 function loadJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; }
@@ -67,12 +68,8 @@ function findRole(guild, roleName) {
 }
 
 function isStaffMember(member) {
-  if (!member) return false;
-  return member.permissions.has('Administrator') ||
-    member.permissions.has('ManageGuild') ||
-    member.permissions.has('ManageMessages') ||
-    member.permissions.has('ManageChannels') ||
-    member.permissions.has('ModerateMembers');
+  if (!member?.roles?.cache) return false;
+  return member.roles.cache.has(STAFF_ROLE_ID);
 }
 
 function isLikelyUsefulStaffMessage(content) {
@@ -177,17 +174,16 @@ function installGroqDiscordBridge(client) {
       memory[channelId] = { createdAt: new Date().toISOString(), openerId: null, openerName: null, staffActive: false, messages: [] };
     }
 
-    // Once a real staff member speaks in a ticket, the AI goes completely silent.
+    // Only the configured staff role can pause the AI.
     if (isStaffMember(message.member)) {
       memory[channelId].staffActive = true;
       saveMemory(memory);
-      console.log(`[Groq] Ticket ${channelId}: staff member ${message.author.tag} joined; AI paused.`);
+      console.log(`[Groq] Ticket ${channelId}: staff role ${STAFF_ROLE_ID} detected on ${message.author.tag}; AI paused.`);
       return;
     }
 
     if (memory[channelId].staffActive) return;
 
-    // Record the first non-staff participant as the ticket opener.
     if (!memory[channelId].openerId) {
       memory[channelId].openerId = message.author.id;
       memory[channelId].openerName = message.member?.displayName || message.author.username;
@@ -263,7 +259,6 @@ function installGroqDiscordBridge(client) {
     }
   });
 
-  // Handle the controlled AI-generated buttons.
   client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton() || !interaction.customId.startsWith('eddy_ai:')) return;
 
@@ -285,7 +280,6 @@ function installGroqDiscordBridge(client) {
 
     if (action === 'close') {
       await interaction.reply({ content: '🔒 בקשת סגירת הטיקט נשלחה. צוות יכול לסגור את הטיקט.', ephemeral: true });
-      return;
     }
   });
 }
