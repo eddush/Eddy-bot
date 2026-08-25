@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { askGroq } = require('../services/groq');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const MEMORY_FILE = path.join(DATA_DIR, 'groq-tickets.json');
@@ -53,7 +54,7 @@ function parseAiResult(raw) {
       .trim();
     return JSON.parse(cleaned);
   } catch {
-    return { needsStaff: false, roleName: null, answer: String(raw || '').trim() };
+    return { shouldRespond: true, needsStaff: false, roleName: null, answer: String(raw || '').trim(), buttons: [] };
   }
 }
 
@@ -122,7 +123,6 @@ async function learnFromStaffMessage(message) {
     );
     if (!duplicate) {
       knowledge[guildId].push(item);
-      // Keep the knowledge base bounded while retaining the newest 500 facts.
       knowledge[guildId] = knowledge[guildId].slice(-500);
       saveJson(KNOWLEDGE_FILE, knowledge);
       console.log(`[Groq] Learned staff knowledge: ${item.knowledge}`);
@@ -137,15 +137,34 @@ function getKnowledge(guildId) {
   return Array.isArray(knowledge[guildId]) ? knowledge[guildId].slice(-100) : [];
 }
 
+function buildButtons(buttons, openerId) {
+  if (!Array.isArray(buttons) || !buttons.length) return null;
+  const allowed = new Set(['staff', 'close', 'info']);
+  const builders = [];
+
+  for (const item of buttons.slice(0, 5)) {
+    if (!item || !allowed.has(item.action)) continue;
+    const label = String(item.label || '').slice(0, 80);
+    if (!label) continue;
+    const customId = `eddy_ai:${item.action}:${openerId}`;
+    builders.push(
+      new ButtonBuilder()
+        .setCustomId(customId)
+        .setLabel(label)
+        .setStyle(item.style === 'danger' ? ButtonStyle.Danger : ButtonStyle.Primary)
+    );
+  }
+
+  return builders.length ? new ActionRowBuilder().addComponents(builders) : null;
+}
+
 function installGroqDiscordBridge(client) {
   const memory = loadMemory();
 
-  // Learn reusable support information from staff messages in ANY channel.
   client.on('messageCreate', async (message) => {
     await learnFromStaffMessage(message);
   });
 
-  // Existing ticket AI behavior.
   client.on('messageCreate', async (message) => {
     if (message.author.bot || !isTicketChannel(message.channel)) return;
     if (!process.env.GROQ_API_KEY) {
@@ -155,14 +174,20 @@ function installGroqDiscordBridge(client) {
 
     const channelId = message.channel.id;
     if (!memory[channelId]) {
-      memory[channelId] = {
-        createdAt: new Date().toISOString(),
-        openerId: message.author.id,
-        openerName: message.member?.displayName || message.author.username,
-        messages: []
-      };
+      memory[channelId] = { createdAt: new Date().toISOString(), openerId: null, openerName: null, staffActive: false, messages: [] };
     }
 
+    // Once a real staff member speaks in a ticket, the AI goes completely silent.
+    if (isStaffMember(message.member)) {
+      memory[channelId].staffActive = true;
+      saveMemory(memory);
+      console.log(`[Groq] Ticket ${channelId}: staff member ${message.author.tag} joined; AI paused.`);
+      return;
+    }
+
+    if (memory[channelId].staffActive) return;
+
+    // Record the first non-staff participant as the ticket opener.
     if (!memory[channelId].openerId) {
       memory[channelId].openerId = message.author.id;
       memory[channelId].openerName = message.member?.displayName || message.author.username;
@@ -181,17 +206,15 @@ function installGroqDiscordBridge(client) {
     const roles = getUsableRoles(message.guild);
     const roleList = roles.length ? roles.map(name => `- ${name}`).join('\n') : '(no usable roles)';
     const knowledge = getKnowledge(message.guild.id);
-    const knowledgeText = knowledge.length
-      ? knowledge.map(x => `- ${x.knowledge}`).join('\n')
-      : '(no learned staff knowledge yet)';
+    const knowledgeText = knowledge.length ? knowledge.map(x => `- ${x.knowledge}`).join('\n') : '(no learned staff knowledge yet)';
 
     const systemPrompt = process.env.GROQ_SYSTEM_PROMPT ||
-      'You are Eddy Bot support AI. Answer Discord ticket users clearly and politely. Reply in the same language as the user. If you do not know the answer, say that a staff member should handle the ticket.';
+      'You are Eddy Bot support AI. Answer only genuine support requests in Discord tickets. Do not answer casual conversation, jokes, greetings, random questions unrelated to support, or messages that do not need a response. If a message is casual or irrelevant, set shouldRespond=false. Reply in the same language as the user. If you do not know the answer, escalate to staff.';
 
     const messages = [
       {
         role: 'system',
-        content: `${systemPrompt}\n\nTICKET OPENER: ${openerName} (<@${openerId}>)\nAddress the ticket opener directly.\n\nLEARNED STAFF KNOWLEDGE:\n${knowledgeText}\nUse this knowledge when relevant, but do not invent facts.\n\nSTAFF ESCALATION:\nDo NOT notify or tag staff on every message. Set needsStaff=true ONLY when a staff member genuinely needs to intervene. For ordinary questions you can answer, set needsStaff=false and roleName=null.\n\nIf needsStaff=true, choose one relevant role from the EXISTING roles below. Never invent a role.\n\nEXISTING DISCORD ROLES:\n${roleList}\n\nReturn ONLY valid JSON:\n{"needsStaff":true,"roleName":"exact existing role name or null","answer":"your helpful answer to the ticket opener"}`
+        content: `${systemPrompt}\n\nTICKET OPENER: ${openerName} (<@${openerId}>)\nAddress the ticket opener directly.\n\nLEARNED STAFF KNOWLEDGE:\n${knowledgeText}\nUse this knowledge when relevant, but do not invent facts.\n\nSTAFF ESCALATION:\nDo NOT notify/tag staff on every message. Set needsStaff=true ONLY when a staff member genuinely needs to intervene. For ordinary support questions you can solve, set needsStaff=false.\n\nEXISTING DISCORD ROLES:\n${roleList}\n\nDISCORD ACTIONS:\nYou may optionally suggest up to 2 buttons. Only use actions: staff (request staff), close (request closing the ticket), info (show useful information). Do not invent custom IDs.\n\nReturn ONLY valid JSON:\n{"shouldRespond":true,"needsStaff":false,"roleName":null,"answer":"answer for the ticket opener","buttons":[{"label":"Request staff","action":"staff","style":"primary"}]}\nFor casual/irrelevant messages use shouldRespond=false and answer="".`
       },
       ...memory[channelId].messages.map(item => ({ role: item.role, content: item.content }))
     ];
@@ -200,7 +223,10 @@ function installGroqDiscordBridge(client) {
       await message.channel.sendTyping();
       const raw = await askGroq(messages);
       const result = parseAiResult(raw);
-      const answer = result.answer || raw;
+
+      if (result.shouldRespond === false) return;
+
+      const answer = result.answer || '';
       const role = result.needsStaff === true ? findRole(message.guild, result.roleName) : null;
 
       if (role) {
@@ -211,22 +237,55 @@ function installGroqDiscordBridge(client) {
         console.log(`[Groq] Ticket ${channelId}: staff needed, selected role "${role.name}" (${role.id})`);
       }
 
+      const buttonRow = buildButtons(result.buttons, openerId);
       if (answer) {
         const openerMention = `<@${openerId}>`;
-        for (const chunk of splitDiscordMessage(`${openerMention}\n🤖 **Eddy AI:** ${answer}`)) {
+        const chunks = splitDiscordMessage(`${openerMention}\n🤖 **Eddy AI:** ${answer}`);
+        for (let i = 0; i < chunks.length; i++) {
           await message.channel.send({
-            content: chunk,
-            allowedMentions: { users: [openerId] }
+            content: chunks[i],
+            allowedMentions: { users: [openerId] },
+            components: i === chunks.length - 1 && buttonRow ? [buttonRow] : []
           });
         }
+      } else if (buttonRow) {
+        await message.channel.send({ components: [buttonRow] });
       }
 
-      memory[channelId].messages.push({ role: 'assistant', content: answer });
-      memory[channelId].messages = memory[channelId].messages.slice(-20);
-      saveMemory(memory);
+      if (answer) {
+        memory[channelId].messages.push({ role: 'assistant', content: answer });
+        memory[channelId].messages = memory[channelId].messages.slice(-20);
+        saveMemory(memory);
+      }
     } catch (error) {
       console.error('[Groq bridge error]', error?.stack || error?.message || error?.data || error);
       await message.channel.send('⚠️ ה־AI לא הצליח לענות כרגע. צוות התמיכה יכול לטפל בטיקט.').catch(() => {});
+    }
+  });
+
+  // Handle the controlled AI-generated buttons.
+  client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isButton() || !interaction.customId.startsWith('eddy_ai:')) return;
+
+    const [, action, openerId] = interaction.customId.split(':');
+    if (interaction.user.id !== openerId && !isStaffMember(interaction.member)) {
+      await interaction.reply({ content: 'הכפתור הזה מיועד לפותח הטיקט או לצוות.', ephemeral: true });
+      return;
+    }
+
+    if (action === 'staff') {
+      await interaction.reply({ content: '👥 בקשת צוות נשלחה. צוות התמיכה יכול להיכנס לטיקט.', ephemeral: true });
+      return;
+    }
+
+    if (action === 'info') {
+      await interaction.reply({ content: 'ℹ️ אם הבעיה לא נפתרה, אפשר לבקש מצוות התמיכה להצטרף לטיקט.', ephemeral: true });
+      return;
+    }
+
+    if (action === 'close') {
+      await interaction.reply({ content: '🔒 בקשת סגירת הטיקט נשלחה. צוות יכול לסגור את הטיקט.', ephemeral: true });
+      return;
     }
   });
 }
