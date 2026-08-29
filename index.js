@@ -12,6 +12,31 @@ function readJson(file,fallback){try{return JSON.parse(fs.readFileSync(file,'utf
 function panelAuthorized(req){const password=process.env.PANEL_PASSWORD;return !!password&&req.get('x-panel-password')===password;}
 function requirePanel(req,res,next){if(!panelAuthorized(req))return res.status(401).json({ok:false,error:'Panel password required'});next();}
 client.once('ready',()=>{console.log(`Logged in as ${client.user.tag}`);client.user.setActivity('EddyWEB | Discord');});
+client.on('guildMemberAdd',async member=>{
+  if(member.guild.id!==DISCORD_GUILD_ID||member.user.bot)return;
+  const commandList=[...client.commands.values()].slice(0,15).map(command=>`• !${command.name} — ${command.description||'פקודה זמינה'}`).join('\n');
+  const welcome=`👋 **ברוכים הבאים לשרת Eddy!**
+
+היי ${member.user.username}! שמחים שהצטרפת אלינו 🎉
+
+🎮 **מה אפשר לעשות כאן?**
+• לשחק ולהתחבר עם חברים
+• לקבל עזרה ותמיכה מהצוות
+• לפתוח טיקט כשצריך עזרה
+• להשתמש בפקודות של הבוט
+• להתעדכן באירועים, עדכונים והודעות חשובות
+
+📚 **עזרה ופקודות**
+${commandList||'• !help — הצגת רשימת הפקודות הזמינות'}
+
+💡 **צריך עזרה?**
+אפשר להשתמש ב-!help כדי לראות את הפקודות, או לפתוח טיקט בערוץ המתאים בשרת.
+
+✨ מקווים שתיהנו בשרת ותכירו חברים חדשים!
+
+— צוות Eddy`;
+  try{await member.send(welcome);console.log(`Welcome DM sent to ${member.user.tag}`);}catch(error){console.log(`Could not send welcome DM to ${member.user.tag}: ${error?.message||error}`);}
+});
 client.on('messageCreate',async message=>{if(message.author.bot||!message.content.startsWith('!'))return;const args=message.content.slice(1).trim().split(/\s+/),name=args.shift().toLowerCase(),command=client.commands.get(name);if(!command)return;panelConfig=loadPanelConfig();const rule=panelConfig.commands[name];if(rule?.enabled===false)return;if(rule?.roleId&&!message.member?.roles.cache.has(rule.roleId))return;try{await command.execute(message,args,client);}catch(err){console.error('Command error:',err);message.reply('שגיאה בהרצת הפקודה.').catch(()=>{});}});
 installGroqDiscordBridge(client);const PORT=process.env.PORT||3000;const app=express();app.use(express.json({limit:'100kb'}));app.use(express.static(path.join(__dirname,'public')));app.use((req,res,next)=>{res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,X-Panel-Password');next();});
 function servePanel(req,res){const file=path.join(__dirname,'public','panel.html');let html=fs.readFileSync(file,'utf8');if(!html.includes('panel-admin-ui.js'))html=html.replace('</body>','<script src="/panel-admin-ui.js"></script></body>');res.type('html').send(html)}
