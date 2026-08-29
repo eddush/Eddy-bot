@@ -3,8 +3,10 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs=require('fs'),path=require('path'),express=require('express');
 const { installGroqDiscordBridge } = require('./integrations/groq-discord');
 const { installPanelAdmin, loadPanelConfig } = require('./panel-admin');
+const installInviteTracker = require('./services/invite-tracker');
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildPresences]});
 client.commands=new Collection();const commandsPath=path.join(__dirname,'commands');if(!fs.existsSync(commandsPath))fs.mkdirSync(commandsPath);for(const file of fs.readdirSync(commandsPath).filter(f=>f.endsWith('.js'))){const cmd=require(path.join(commandsPath,file));if(cmd.name&&cmd.execute)client.commands.set(cmd.name,cmd);}
+installInviteTracker(client);
 const DISCORD_GUILD_ID='1417557162875555974';let panelConfig=loadPanelConfig();let STAFF_ROLE_IDS=panelConfig.roles;const OLD_TICKETS_CHANNEL_ID='1492042358462615562';const SAVED_CHATS_CATEGORY_ID='1541363285490663455';const DATA_DIR=path.join(__dirname,'data');const KNOWLEDGE_FILE=path.join(DATA_DIR,'groq-staff-knowledge.json');const MEMORY_FILE=path.join(DATA_DIR,'groq-tickets.json');
 function readJson(file,fallback){try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;}}
 function panelAuthorized(req){const password=process.env.PANEL_PASSWORD;return !!password&&req.get('x-panel-password')===password;}
