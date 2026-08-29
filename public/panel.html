@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EddyBot Panel</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#0b1020;color:#eef2ff;min-height:100vh}body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 20% 10%,#6d5df533,transparent 35%),radial-gradient(circle at 90% 80%,#00d4ff1c,transparent 30%);pointer-events:none}.wrap{width:min(1100px,92%);margin:auto;padding:32px 0 50px;position:relative}.top{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:28px}.brand{display:flex;align-items:center;gap:14px}.logo{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:linear-gradient(135deg,#7c5cff,#19c8ff);font-size:25px;font-weight:800;box-shadow:0 10px 30px #0005}.title{margin:0;font-size:30px}.sub{margin:4px 0 0;color:#9ca8c7}.status{display:flex;align-items:center;gap:9px;padding:10px 15px;border:1px solid #ffffff14;border-radius:999px;background:#ffffff09;color:#cbd5e1}.dot{width:10px;height:10px;border-radius:50%;background:#f43f5e;box-shadow:0 0 12px #f43f5e}.dot.ok{background:#22c55e;box-shadow:0 0 12px #22c55e}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.card{background:#11182bde;border:1px solid #ffffff10;border-radius:20px;padding:20px;box-shadow:0 15px 40px #0002;backdrop-filter:blur(12px)}.label{color:#8f9bb8;font-size:14px}.value{font-size:30px;font-weight:800;margin-top:8px}.wide{grid-column:span 2}.section-title{font-size:18px;margin:0 0 16px}.server{display:flex;align-items:center;justify-content:space-between;gap:15px}.server-name{font-size:22px;font-weight:750}.server-id{font-size:12px;color:#7f8baa;margin-top:4px;direction:ltr;text-align:right}.staff{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.role{padding:14px;border-radius:15px;background:#ffffff06;border:1px solid #ffffff0c}.role-top{display:flex;justify-content:space-between;gap:10px}.role-name{font-weight:700}.online{color:#4ade80;font-weight:700}.role-count{color:#9aa7c2;font-size:13px;margin-top:7px}.footer{margin-top:20px;text-align:center;color:#687590;font-size:13px}.refresh{border:1px solid #ffffff15;background:#ffffff09;color:#dbe4ff;border-radius:12px;padding:10px 14px;cursor:pointer}.refresh:hover{background:#ffffff14}@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.wide{grid-column:span 2}.top{align-items:flex-start}.title{font-size:24px}}@media(max-width:520px){.grid{grid-template-columns:1fr}.wide{grid-column:span 1}.top{flex-direction:column}.staff{grid-template-columns:1fr}.server{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div class="brand"><div class="logo">E</div><div><h1 class="title">EddyBot Panel</h1><p class="sub">פאנל ניהול ומעקב של הבוט</p></div></div>
+      <div><button class="refresh" onclick="load()">↻ רענן</button><span class="status"><span id="dot" class="dot"></span><span id="status">בודק...</span></span></div>
+    </header>
+
+    <section class="grid">
+      <div class="card"><div class="label">חברי השרת</div><div id="members" class="value">—</div></div>
+      <div class="card"><div class="label">מחוברים</div><div id="online" class="value">—</div></div>
+      <div class="card"><div class="label">בוטים</div><div id="bots" class="value">—</div></div>
+      <div class="card"><div class="label">צוות מחובר</div><div id="staffOnline" class="value">—</div></div>
+
+      <div class="card wide">
+        <h2 class="section-title">שרת Discord</h2>
+        <div class="server"><div><div id="guild" class="server-name">—</div><div id="guildId" class="server-id">—</div></div><div id="humans" class="label">—</div></div>
+      </div>
+
+      <div class="card wide">
+        <h2 class="section-title">צוות</h2>
+        <div id="staff" class="staff"></div>
+      </div>
+    </section>
+    <div class="footer">EddyBot • מתעדכן אוטומטית כל 15 שניות</div>
+  </main>
+<script>
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  async function load(){
+    try{
+      const r=await fetch('/api/discord',{cache:'no-store'}); const d=await r.json();
+      if(!r.ok||!d.ok) throw new Error(d.error||'offline');
+      document.getElementById('dot').classList.add('ok'); document.getElementById('status').textContent='הבוט מחובר';
+      document.getElementById('members').textContent=d.members??0; document.getElementById('online').textContent=d.online??0; document.getElementById('bots').textContent=d.bots??0; document.getElementById('humans').textContent=`${d.humans??0} משתמשים אמיתיים`; document.getElementById('staffOnline').textContent=d.staff?.totalAvailable??0; document.getElementById('guild').textContent=d.name||'Discord Server'; document.getElementById('guildId').textContent=d.guildId||'';
+      const roles=d.staff?.roles||{}; document.getElementById('staff').innerHTML=Object.values(roles).map(x=>`<div class="role"><div class="role-top"><span class="role-name">${esc(x.name)}</span><span class="online">● ${x.online}</span></div><div class="role-count">${x.total} חברי צוות • ${x.available} זמינים</div></div>`).join('');
+    }catch(e){document.getElementById('dot').classList.remove('ok');document.getElementById('status').textContent='הבוט לא זמין';}
+  }
+  load(); setInterval(load,15000);
+</script>
+</body>
+</html>
