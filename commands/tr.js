@@ -1,4 +1,4 @@
-const { PermissionFlagsBits, ChannelType } = require('discord.js');
+const { PermissionFlagsBits, ChannelType, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const TRANSCRIPT_CATEGORY_ID = '1541363285490663455';
 
@@ -101,13 +101,22 @@ ${rows || '<p>אין הודעות לשמירה.</p>'}
       const header = `# 📄 Transcript\n**שרת:** ${message.guild.name}\n**ערוץ מקורי:** #${message.channel.name}\n**נוצר על ידי:** ${message.author}\n**הודעות:** ${allMessages.length}`;
       await transcriptChannel.send(header);
 
-      // Send the transcript as a file directly into the new channel.
-      const { AttachmentBuilder } = require('discord.js');
       const buffer = Buffer.from(html, 'utf8');
       const fileName = `transcript-${safeName}-${Date.now()}.html`;
+      const attachment = new AttachmentBuilder(buffer, { name: fileName });
+
+      // Button uses Discord's attachment:// URL so clicking it opens the HTML file.
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel('🔗 פתח Transcript')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`attachment://${fileName}`)
+      );
+
       await transcriptChannel.send({
-        content: '📁 קובץ ה-Transcript המלא של הצ׳אט:',
-        files: [new AttachmentBuilder(buffer, { name: fileName })]
+        content: '📁 **Transcript נשמר בהצלחה!**\nלחץ על הכפתור כדי לפתוח את הקובץ:',
+        files: [attachment],
+        components: [row]
       });
 
       await status.edit(`✅ יצרתי את ערוץ ה-Transcript: ${transcriptChannel}`);
