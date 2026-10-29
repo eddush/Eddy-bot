@@ -52,7 +52,7 @@ async function getPlayerData(username) {
     select: 'id,permission,value',
     uuid: 'eq.' + player.uuid,
     value: 'eq.true',
-    permission: 'ilike.meta.%',
+    permission: 'ilike.%',
     order: 'id.desc',
     limit: '500'
   });
