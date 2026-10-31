@@ -57,15 +57,44 @@ async function getPlayerData(username) {
     limit: '500'
   });
 
-  let rank = String(player.primary_group || 'default').trim();
-  if (!rank || rank.toLowerCase() === 'default') {
-    const groups = permissions
-      .map(row => String(row.permission || ''))
-      .filter(p => /^group\.[A-Za-z0-9_-]+$/i.test(p))
-      .map(p => p.slice(6))
-      .filter(g => g.toLowerCase() !== 'default');
-    if (groups.length) rank = groups[0];
+  // Resolve the highest LuckPerms group by traversing group inheritance.
+  // A larger LuckPerms group weight means a higher rank.
+  const directGroups = permissions
+    .map(row => String(row.permission || ''))
+    .filter(p => /^group\\.[A-Za-z0-9_-]+$/i.test(p))
+    .map(p => p.slice(6));
+  const primaryGroup = String(player.primary_group || '').trim();
+  const queue = [...new Set([primaryGroup, ...directGroups].filter(Boolean))];
+  const visited = new Set();
+  const candidates = [];
+
+  while (queue.length && visited.size < 100) {
+    const groupName = queue.shift();
+    const key = groupName.toLowerCase();
+    if (!key || key === 'default' || visited.has(key)) continue;
+    visited.add(key);
+
+    const nodes = await selectRows(prefix + 'group_permissions', {
+      select: 'permission,value',
+      group: 'eq.' + groupName,
+      value: 'eq.true',
+      permission: 'ilike.%',
+      limit: '500'
+    });
+
+    let weight = 0;
+    for (const node of nodes) {
+      const permission = String(node.permission || '');
+      const weightMatch = permission.match(/^weight\\.(\\d+)$/i);
+      if (weightMatch) weight = Math.max(weight, Number(weightMatch[1]));
+      const inherited = permission.match(/^group\\.([A-Za-z0-9_-]+)$/i);
+      if (inherited && !visited.has(inherited[1].toLowerCase())) queue.push(inherited[1]);
+    }
+    candidates.push({ name: groupName, weight, isPrimary: key === primaryGroup.toLowerCase() });
   }
+
+  candidates.sort((a, b) => b.weight - a.weight || Number(b.isPrimary) - Number(a.isPrimary));
+  const rank = candidates[0]?.name || (primaryGroup && primaryGroup.toLowerCase() !== 'default' ? primaryGroup : 'default');
 
   // Money and playtime are encoded as LuckPerms meta nodes, matching EddyWEB.
   const moneyNode = permissions.find(row => /^meta\.eddy_money\./i.test(String(row.permission || '')));
