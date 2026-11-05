@@ -1,4 +1,4 @@
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const crypto = require('crypto');
 const GUILD_ID = process.env.DISCORD_GUILD_ID || '1417557162875555974';
 const SECRET_HEADER = 'x-eddyweb-support-secret';
@@ -15,6 +15,19 @@ function isAuthorized(req) {
 function parseTicketTopic(topic) {
   const match = String(topic || '').match(/^eddyweb-(ticket|closed):([0-9a-f-]{36})\|user:([0-9a-f-]{36})$/i);
   return match ? { closed: match[1] === 'closed', ticketId: match[2], userId: match[3] } : null;
+}
+function supportEmbed({ title, description, color = 0x25C9B5, fields = [], footer = 'EddyWEB Support' }) {
+  return new EmbedBuilder()
+    .setColor(color)
+    .setTitle(title)
+    .setDescription(description || null)
+    .addFields(fields.filter(field => field.value).map(field => ({
+      name: String(field.name).slice(0, 256),
+      value: String(field.value).slice(0, 1024),
+      inline: Boolean(field.inline)
+    })))
+    .setFooter({ text: footer })
+    .setTimestamp();
 }
 function installSupportBridge(app, client, getStaffRoleIds) {
   const requireSecret = (req, res, next) => { if (!isAuthorized(req)) return res.status(401).json({ success: false, message: 'Unauthorized' }); next(); };
@@ -44,9 +57,19 @@ function installSupportBridge(app, client, getStaffRoleIds) {
         topic:TICKET_TOPIC_PREFIX+ticketId+'|user:'+userId,
         permissionOverwrites:overwrites,reason:'New EddyWEB support ticket'
       });
-      await channel.send({content:['🆘 **פנייה חדשה דרך EddyWEB**','**משתמש:** '+displayName,'**נושא:** '+subject,
-        '**מזהה חשבון:** '+userId,'**מזהה שיחה:** '+ticketId,'','**הודעה ראשונה:**',firstMessage,
-        '','הודעות מהאתר יופיעו כאן. תשובות הצוות בערוץ יישלחו בחזרה לאתר.'].join('\n'),allowedMentions:{parse:[]}});
+      const ticketEmbed = supportEmbed({
+        title: '🎫 פנייה חדשה מ-EddyWEB',
+        description: 'נפתחה שיחת תמיכה חדשה באתר. אפשר להשיב כאן והתגובה תישלח אוטומטית לצ׳אט באתר.',
+        color: 0x25C9B5,
+        fields: [
+          { name: '👤 משתמש', value: displayName || 'לא צוין', inline: true },
+          { name: '📌 נושא הפנייה', value: subject, inline: true },
+          { name: '💬 הודעה ראשונה', value: firstMessage },
+          { name: '🆔 מזהה שיחה', value: ticketId, inline: false }
+        ],
+        footer: 'EddyWEB • מערכת התמיכה'
+      });
+      await channel.send({ embeds: [ticketEmbed], allowedMentions: { parse: [] } });
       return res.status(201).json({success:true,channelId:channel.id});
     } catch(error) { console.error('EddyWEB support ticket create failed:',error); return res.status(500).json({success:false,message:'Could not create Discord ticket'}); }
   });
@@ -60,7 +83,14 @@ function installSupportBridge(app, client, getStaffRoleIds) {
       const channel=guild?.channels.cache.find(item=>parseTicketTopic(item.topic)?.ticketId===ticketId);
       const topic=parseTicketTopic(channel?.topic);
       if(!channel?.isTextBased?.()||!topic||topic.closed)return res.status(404).json({success:false,message:'Ticket channel not found or closed'});
-      const sent=await channel.send({content:'🌐 **'+senderName+' (EddyWEB):**\n'+content+'\nweb-message:'+messageId,allowedMentions:{parse:[]}});
+      const messageEmbed = supportEmbed({
+        title: '🌐 הודעה חדשה מהאתר',
+        description: content,
+        color: 0x3498DB,
+        fields: [{ name: '👤 נשלח על ידי', value: senderName || 'משתמש EddyWEB', inline: true }],
+        footer: 'EddyWEB • מזהה הודעה: ' + messageId
+      });
+      const sent=await channel.send({embeds:[messageEmbed],allowedMentions:{parse:[]}});
       return res.json({success:true,discordMessageId:sent.id});
     }catch(error){console.error('EddyWEB support message relay failed:',error);return res.status(500).json({success:false,message:'Could not relay message to Discord'});}
   });
@@ -73,7 +103,12 @@ function installSupportBridge(app, client, getStaffRoleIds) {
       if(!topic)return res.status(404).json({success:false,message:'Ticket not found'});
       await channel.setTopic(CLOSED_TOPIC_PREFIX+ticketId+'|user:'+topic.userId);
       await channel.setName(('closed-'+channel.name).slice(0,100));
-      await channel.send({content:'🔒 **השיחה נסגרה דרך EddyWEB.**',allowedMentions:{parse:[]}});
+      await channel.send({embeds:[supportEmbed({
+        title:'🔒 השיחה נסגרה',
+        description:'השיחה נסגרה דרך אתר EddyWEB.',
+        color:0x747F8D,
+        footer:'EddyWEB • מערכת התמיכה'
+      })],allowedMentions:{parse:[]}});
       return res.json({success:true});
     }catch(error){console.error('EddyWEB support ticket close failed:',error);return res.status(500).json({success:false,message:'Could not close Discord ticket'});}
   });
