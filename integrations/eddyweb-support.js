@@ -37,7 +37,7 @@ function installSupportBridge(app, client, getStaffRoleIds) {
       const subject=safeText(req.body?.subject,100), displayName=safeText(req.body?.displayName,64);
       const firstMessage=safeText(req.body?.firstMessage,4000);
       const discordUserId=safeText(req.body?.discordUserId,20);
-      const validDiscordUserId=/^\\d{17,20}$/.test(discordUserId)?discordUserId:null;
+      const validDiscordUserId=/^\d{17,20}$/.test(discordUserId)?discordUserId:null;
       if(!/^[0-9a-f-]{36}$/i.test(ticketId)||!/^[0-9a-f-]{36}$/i.test(userId)||subject.length<2||firstMessage.length<2)
         return res.status(400).json({success:false,message:'Invalid support ticket details'});
       const guild=client.guilds.cache.get(GUILD_ID);
