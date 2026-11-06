@@ -14,7 +14,7 @@ function isAuthorized(req) {
 }
 function parseTicketTopic(topic) {
   const match = String(topic || '').match(/^eddyweb-(ticket|closed):([0-9a-f-]{36})\|user:([0-9a-f-]{36})$/i);
-  return match ? { closed: match[1] === 'closed', ticketId: match[2], userId: match[3] } : null;
+  return match ? { closed: match[1] === 'closed', ticketId: match[2], userId: match[3], discordUserId: match[4] || null } : null;
 }
 function supportEmbed({ title, description, color = 0x25C9B5, fields = [], footer = 'EddyWEB Support' }) {
   return new EmbedBuilder()
@@ -36,12 +36,25 @@ function installSupportBridge(app, client, getStaffRoleIds) {
       const ticketId=safeText(req.body?.ticketId,36), userId=safeText(req.body?.userId,36);
       const subject=safeText(req.body?.subject,100), displayName=safeText(req.body?.displayName,64);
       const firstMessage=safeText(req.body?.firstMessage,4000);
+      const discordUserId=safeText(req.body?.discordUserId,20);
+      const validDiscordUserId=/^\\d{17,20}$/.test(discordUserId)?discordUserId:null;
       if(!/^[0-9a-f-]{36}$/i.test(ticketId)||!/^[0-9a-f-]{36}$/i.test(userId)||subject.length<2||firstMessage.length<2)
         return res.status(400).json({success:false,message:'Invalid support ticket details'});
       const guild=client.guilds.cache.get(GUILD_ID);
       if(!guild)return res.status(503).json({success:false,message:'Discord server is unavailable'});
       const existing=guild.channels.cache.find(channel=>parseTicketTopic(channel.topic)?.ticketId===ticketId);
-      if(existing)return res.json({success:true,channelId:existing.id});
+      if(existing){
+        let discordAccessGranted=false;
+        if(validDiscordUserId){
+          try{
+            const member=await guild.members.fetch(validDiscordUserId);
+            await existing.permissionOverwrites.edit(member.id,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true,AttachFiles:true,EmbedLinks:true});
+            await existing.setTopic(TICKET_TOPIC_PREFIX+ticketId+'|user:'+userId+'|discord:'+validDiscordUserId);
+            discordAccessGranted=true;
+          }catch(error){console.warn('Could not grant Discord ticket access:',error?.message||error);}
+        }
+        return res.json({success:true,channelId:existing.id,discordAccessGranted});
+      }
       const roleIds=Object.values(getStaffRoleIds()||{}).filter(id=>/^\d{17,20}$/.test(String(id)));
       const overwrites=[
         {id:guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},
@@ -54,9 +67,17 @@ function installSupportBridge(app, client, getStaffRoleIds) {
         name:('web-'+(displayName||'user')+'-'+ticketId.slice(0,6)).toLowerCase().replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').slice(0,90),
         type:ChannelType.GuildText,
         ...(category?.type===ChannelType.GuildCategory?{parent:category.id}:{}),
-        topic:TICKET_TOPIC_PREFIX+ticketId+'|user:'+userId,
+        topic:TICKET_TOPIC_PREFIX+ticketId+'|user:'+userId+(validDiscordUserId?'|discord:'+validDiscordUserId:''),
         permissionOverwrites:overwrites,reason:'New EddyWEB support ticket'
       });
+      let discordAccessGranted=false;
+      if(validDiscordUserId){
+        try{
+          const member=await guild.members.fetch(validDiscordUserId);
+          await channel.permissionOverwrites.edit(member.id,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true,AttachFiles:true,EmbedLinks:true});
+          discordAccessGranted=true;
+        }catch(error){console.warn('Discord ticket owner is not in the server or access could not be granted:',error?.message||error);}
+      }
       const ticketEmbed = supportEmbed({
         title: '🎫 פנייה חדשה מ-EddyWEB',
         description: 'נפתחה שיחת תמיכה חדשה באתר. אפשר להשיב כאן והתגובה תישלח אוטומטית לצ׳אט באתר.',
@@ -70,7 +91,7 @@ function installSupportBridge(app, client, getStaffRoleIds) {
         footer: 'EddyWEB • מערכת התמיכה'
       });
       await channel.send({ embeds: [ticketEmbed], allowedMentions: { parse: [] } });
-      return res.status(201).json({success:true,channelId:channel.id});
+      return res.status(201).json({success:true,channelId:channel.id,discordAccessGranted});
     } catch(error) { console.error('EddyWEB support ticket create failed:',error); return res.status(500).json({success:false,message:'Could not create Discord ticket'}); }
   });
   app.post('/api/support/tickets/:ticketId/messages',requireSecret,async(req,res)=>{
@@ -117,7 +138,10 @@ function installSupportBridge(app, client, getStaffRoleIds) {
     const ticket=parseTicketTopic(message.channel?.topic);
     if(!ticket||ticket.closed||message.content.startsWith('!'))return;
     const staffIds=new Set(Object.values(getStaffRoleIds()||{}).map(String));
-    if(!message.member.roles.cache.some(role=>staffIds.has(role.id)))return;
+    const isTicketOwner=!!ticket.discordUserId&&ticket.discordUserId===message.author.id;
+    const isStaff=message.member.roles.cache.some(role=>staffIds.has(role.id));
+    if(!isTicketOwner&&!isStaff)return;
+    const senderType=isTicketOwner?'user':'staff';
     const content=safeText(message.content,4000);if(!content)return;
     const websiteUrl=String(process.env.EDDYWEB_API_URL||'https://eddy-web-seven.vercel.app').replace(/\/+$/,'');
     const secret=String(process.env.EDDYWEB_SUPPORT_SHARED_SECRET||'');if(!secret)return;
@@ -125,7 +149,7 @@ function installSupportBridge(app, client, getStaffRoleIds) {
       const response=await fetch(websiteUrl+'/api/support/internal/discord-message',{
         method:'POST',headers:{'Content-Type':'application/json',[SECRET_HEADER]:secret},
         body:JSON.stringify({ticketId:ticket.ticketId,channelId:message.channel.id,discordMessageId:message.id,
-          senderId:message.author.id,senderName:message.member.displayName||message.author.username,content}),
+          senderId:message.author.id,senderName:message.member.displayName||message.author.username,senderType,content}),
         signal:AbortSignal.timeout(12000)
       });
       if(!response.ok){const detail=await response.text().catch(()=> '');console.error('EddyWEB staff reply sync failed:',response.status,detail);
