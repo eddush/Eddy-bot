@@ -13,7 +13,7 @@ function isAuthorized(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 function parseTicketTopic(topic) {
-  const match = String(topic || '').match(/^eddyweb-(ticket|closed):([0-9a-f-]{36})\|user:([0-9a-f-]{36})$/i);
+  const match = String(topic || '').match(/^eddyweb-(ticket|closed):([0-9a-f-]{36})\|user:([0-9a-f-]{36})(?:\|discord:(\d{17,20}))?$/i);
   return match ? { closed: match[1] === 'closed', ticketId: match[2], userId: match[3], discordUserId: match[4] || null } : null;
 }
 function supportEmbed({ title, description, color = 0x25C9B5, fields = [], footer = 'EddyWEB Support' }) {
