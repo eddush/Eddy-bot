@@ -22,7 +22,7 @@ function pollPayload(message) {
   if (!poll) return null;
   const question = String(poll.question?.text || '').trim();
   const answers = [...poll.answers.values()];
-  const options = answers.map(answer => String(answer.text || '').trim()).filter(Boolean);
+  const options = answers.map(answer => String(answer.text || answer.emoji?.name || '').trim()).filter(Boolean);
   if (!question || options.length < 2) return null;
   return {
     question,
@@ -45,7 +45,7 @@ async function getUniqueVoters(message) {
   for (const answer of answers) {
     let after;
     while (true) {
-      const users = await answer.fetchVoters({ limit: 100, ...(after ? { after } : {}) });
+      const users = await answer.voters.fetch({ limit: 100, ...(after ? { after } : {}) });
       for (const user of users.values()) ids.add(user.id);
       if (users.size < 100) break;
       after = users.last()?.id;
