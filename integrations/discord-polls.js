@@ -39,6 +39,19 @@ function pollPayload(message) {
   };
 }
 
+async function getWebsiteResults(sitePollId) {
+  const response = await fetch(API_URL + '/api/polls', {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(10000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) throw new Error(data.message || 'Could not fetch EddyWEB poll results');
+  const poll = (data.polls || []).find(item => item.id === sitePollId);
+  if (!poll) throw new Error('Synced EddyWEB poll not found');
+  return poll;
+}
+
 async function getUniqueVoters(message) {
   const answers = [...(message.poll?.answers?.values?.() || [])];
   const ids = new Set();
@@ -73,18 +86,24 @@ async function finish(client, sitePollId, sourceMessage, reason = 'expired') {
       if (!message?.poll?.allowMultiselect) totalVoters = answers.reduce((sum, answer) => sum + Number(answer.voteCount || 0), 0);
     }
     await api({ action: 'discord_close', pollId: sitePollId, totalVoters, counts, finalized });
+    const websitePoll = await getWebsiteResults(sitePollId);
     const channel = message?.channel;
     if (channel?.isTextBased?.()) {
-      const resultLines = answers.map(answer => {
+      const discordLines = answers.map(answer => {
         const label = answer.text || answer.emoji?.name || 'אפשרות';
         return '• **' + label + '** — ' + Number(answer.voteCount || 0);
+      });
+      const websiteLines = (websitePoll.options || []).map(option => {
+        return '• **' + option.label + '** — ' + Number(websitePoll.counts?.[option.id] || 0);
       });
       const note = finalized ? '' : '\n\n_התוצאות עדיין לא סופיות ב־Discord._';
       await channel.send({
         content: '📊 **הסקר הסתיים!**\n' +
           (message?.url ? '[צפייה בסקר המקורי](' + message.url + ')\n' : '') +
-          '**מספר מצביעים ב־Discord:** ' + totalVoters +
-          (resultLines.length ? '\n' + resultLines.join('\n') : '') +
+          '**הצבעות ב־Discord:** ' + totalVoters +
+          (discordLines.length ? '\n' + discordLines.join('\n') : '') +
+          '\n\n**הצבעות באתר EddyWEB:** ' + Number(websitePoll.totalVotes || 0) +
+          (websiteLines.length ? '\n' + websiteLines.join('\n') : '') +
           note,
         allowedMentions: { parse: [] }
       });
